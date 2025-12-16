@@ -1,50 +1,102 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 import pdfplumber
+from weasyprint import HTML
+import tempfile
+import os
 
 app = FastAPI()
+
+HTML_TEMPLATE = """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }}
+    h1 {{
+      color: #1f4fd8;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }}
+    td, th {{
+      border-bottom: 1px solid #ddd;
+      padding: 6px;
+    }}
+  </style>
+</head>
+<body>
+  <h1>Class A Fix Compliance Report</h1>
+
+  <p><strong>Report type:</strong> {report_type}</p>
+
+  <h3>Extracted content</h3>
+  <table>
+    <tr><th>Sample Text</th></tr>
+    <tr><td>{text}</td></tr>
+  </table>
+</body>
+</html>
+"""
 
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
-    <h2>Class A Fix. Compliance Report Engine</h2>
+    <h2>Class A Fix PDF Generator</h2>
 
-    <form action="/upload" method="post" enctype="multipart/form-data">
+    <form action="/generate" method="post" enctype="multipart/form-data">
       <label>Report type</label><br>
       <select name="report_type">
-        <option value="smoke_alarm">Smoke Alarm</option>
-        <option value="electrical">Electrical</option>
-        <option value="gas">Gas</option>
-        <option value="rms">Rental Minimum Standards</option>
+        <option value="Smoke Alarm">Smoke Alarm</option>
+        <option value="Electrical">Electrical</option>
+        <option value="Gas">Gas</option>
+        <option value="RMS">Rental Minimum Standards</option>
       </select>
-
       <br><br>
 
-      <label>Upload subcontractor PDF</label><br>
-      <input type="file" name="report_file" required>
-
+      <label>Upload PDF</label><br>
+      <input type="file" name="pdf" required>
       <br><br>
 
-      <button type="submit">Upload</button>
+      <button type="submit">Generate PDF</button>
     </form>
     """
 
-@app.post("/upload")
-async def upload(report_type: str = Form(...), report_file: UploadFile = File(...)):
-    text = ""
+@app.post("/generate")
+async def generate_pdf(
+    report_type: str = Form(...),
+    pdf: UploadFile = File(...)
+):
+    extracted_text = ""
 
-    with pdfplumber.open(report_file.file) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+    with pdfplumber.open(pdf.file) as doc:
+        for page in doc.pages:
+            t = page.extract_text()
+            if t:
+                extracted_text += t + "\n"
 
-    data = {
-        "report_type": report_type,
-        "meta": {
-            "status": "Compliant" if "compliant" in text.lower() else "",
-        },
-        "raw_text_sample": text[:2000]
-    }
+    extracted_text = extracted_text[:1500]
 
-    return data
+    html = HTML_TEMPLATE.format(
+        report_type=report_type,
+        text=extracted_text.replace("\n", "<br>")
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        HTML(string=html).write_pdf(tmp.name)
+        pdf_bytes = open(tmp.name, "rb").read()
+        os.unlink(tmp.name)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": "attachment; filename=classafix_report.pdf"
+        }
+    )
