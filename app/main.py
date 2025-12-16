@@ -70,3 +70,4 @@ async def generate(
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=report.pdf"}
     )
+ 
