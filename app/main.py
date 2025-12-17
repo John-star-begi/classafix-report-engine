@@ -18,12 +18,31 @@ def home():
     <h2>Class A Fix PDF Generator</h2>
 
     <form action="/generate" method="post" enctype="multipart/form-data">
+
       <label>Report type</label><br>
       <select name="report_type">
         <option value="smoke">Smoke Alarm</option>
         <option value="electrical">Electrical</option>
         <option value="gas">Gas</option>
         <option value="rms">Rental Minimum Standards</option>
+      </select><br><br>
+
+      <label>Agency</label><br>
+      <input type="text" name="agency" value="Nelson Alexander" readonly><br><br>
+
+      <label>Property Manager</label><br>
+      <select name="property_manager">
+        <option value="">Select property manager</option>
+        <option value="Ashlyn Halford">Ashlyn Halford</option>
+        <option value="Dianna Kefaloukos">Dianna Kefaloukos</option>
+        <option value="Eleni Kalogeropoulos">Eleni Kalogeropoulos</option>
+        <option value="Emily Philp">Emily Philp</option>
+        <option value="Irene Fagliarone">Irene Fagliarone</option>
+        <option value="Julia Baggio">Julia Baggio</option>
+        <option value="Kelsey Lincoln">Kelsey Lincoln</option>
+        <option value="Leah Racovalis">Leah Racovalis</option>
+        <option value="Stephanie Shamoon">Stephanie Shamoon</option>
+        <option value="William Kuzu">William Kuzu</option>
       </select><br><br>
 
       <label>Upload PDF</label><br>
@@ -40,6 +59,8 @@ def home():
 @app.post("/generate")
 async def generate(
     report_type: str = Form(...),
+    agency: str = Form(...),
+    property_manager: str = Form(""),
     pdf: UploadFile = File(...),
     photos: list[UploadFile] = File(default=[])
 ):
@@ -69,6 +90,10 @@ async def generate(
 
     else:
         return {"error": "Invalid report type"}
+
+    # Inject agency + PM into data for templates
+    data["agency"] = agency
+    data["property_manager"] = property_manager
 
     pdf_bytes = render_pdf(template, data, photos)
 
