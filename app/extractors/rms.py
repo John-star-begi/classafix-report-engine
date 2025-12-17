@@ -1,14 +1,15 @@
 import re
 
+# Order matters. This must match COMP order.
 CATEGORIES = [
     ("bathroom", "Bathroom"),
-    ("electrical_safety", "Electrical safety"),
+    ("electrical_safety", "Electrical Safety"),
     ("lighting", "Lighting"),
     ("kitchen", "Kitchen"),
     ("laundry", "Laundry"),
     ("locks", "Locks"),
     ("heating", "Heating"),
-    ("mould_and_damp", "Mould and damp"),
+    ("mould_and_damp", "Mould & damp"),
     ("structural_soundness", "Structural soundness"),
     ("toilets", "Toilets"),
     ("ventilation", "Ventilation"),
@@ -17,53 +18,91 @@ CATEGORIES = [
     ("windows", "Windows"),
 ]
 
+# Unicode glyphs used by COMP
+COMPLIANT_SIGNS = ["☑", "✓", "✔"]
+NON_COMPLIANT_SIGNS = ["☐", "☒", "✗", "✘", "⛔"]
+
 
 def extract_rms(text: str) -> dict:
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    """
+    RMS extractor for COMP PDFs.
 
-    # ---------------- HEADER ----------------
+    Source of truth:
+    - SUMMARY section checkbox symbols
+    - ✔ / ☑ = Compliant
+    - ✗ / ☒ / ☐ = Non compliant
+
+    Checklist text is ignored by design.
+    """
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lower_lines = [l.lower() for l in lines]
+
+    # -------------------------------------------------
+    # HEADER EXTRACTION
+    # -------------------------------------------------
     property_address = ""
     generated_date = ""
     reference = ""
 
     for l in lines:
-        if not property_address and "Property" in l and "VIC" in l:
-            property_address = l.replace("Property", "").strip()
+        if not property_address and "attended:" in l.lower():
+            property_address = l.split("attended:", 1)[-1].strip()
 
-        if not generated_date and "Date:" in l:
-            generated_date = l.split("Date:", 1)[-1].strip()
+        if not generated_date and "date:" in l.lower():
+            generated_date = l.split("date:", 1)[-1].strip()
 
-        if not reference and "Compliance Report" in l:
+        if not reference and "compliance report" in l.lower():
             m = re.search(r"\d+", l)
             if m:
                 reference = m.group(0)
 
-    # ---------------- SUMMARY EXTRACTION ----------------
+    # -------------------------------------------------
+    # INIT CATEGORY STRUCTURE
+    # -------------------------------------------------
     categories = {}
     for slug, name in CATEGORIES:
         categories[slug] = {
             "name": name,
             "status": "Compliant",
             "status_class": "ok",
-            "note": "",
+            "note": "",  # manual inspector comment only
         }
 
-    # Look for category rows and detect X symbol
+    # -------------------------------------------------
+    # SUMMARY CHECKBOX SCAN (AUTHORITATIVE)
+    # -------------------------------------------------
     for i, line in enumerate(lines):
         for slug, name in CATEGORIES:
             if name.lower() in line.lower():
-                # Check same line + next line for X
-                window = " ".join(lines[i:i+2])
+                # Read same + next line to catch glyph separation
+                window = " ".join(lines[i:i + 2])
 
-                if " X " in f" {window} " or " x " in f" {window} ":
+                # Non compliant has priority
+                if any(sym in window for sym in NON_COMPLIANT_SIGNS):
                     categories[slug]["status"] = "Non compliant"
                     categories[slug]["status_class"] = "bad"
 
+                elif any(sym in window for sym in COMPLIANT_SIGNS):
+                    categories[slug]["status"] = "Compliant"
+                    categories[slug]["status_class"] = "ok"
+
+    # -------------------------------------------------
+    # COUNTS
+    # -------------------------------------------------
     non_compliant_count = sum(
         1 for c in categories.values() if c["status"] == "Non compliant"
     )
 
-    # ---------------- SUMMARY TABLE HTML ----------------
+    overall_status = (
+        "One non compliant category identified"
+        if non_compliant_count > 0
+        else "Compliant"
+    )
+
+    # -------------------------------------------------
+    # SUMMARY TABLE HTML
+    # -------------------------------------------------
     category_table = ""
     for slug, name in CATEGORIES:
         c = categories[slug]
@@ -77,12 +116,9 @@ def extract_rms(text: str) -> dict:
         </tr>
         """
 
-    overall_status = (
-        "One non compliant category identified"
-        if non_compliant_count > 0
-        else "Compliant"
-    )
-
+    # -------------------------------------------------
+    # FINAL PAYLOAD
+    # -------------------------------------------------
     return {
         "property_address": property_address,
         "overall_status": overall_status,
