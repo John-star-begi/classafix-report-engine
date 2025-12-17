@@ -102,24 +102,41 @@ td{
 .status-ok{color:var(--ok);font-weight:700;}
 .status-bad{color:var(--bad);font-weight:700;}
 
-.category{
-  margin-bottom:14px;
+.details-card .category{
+  border-top:1px solid var(--border);
+  padding-top:10px;
+  margin-top:10px;
 }
-.category-header{
+.details-card .category:first-child{
+  border-top:none;
+  padding-top:0;
+  margin-top:0;
+}
+
+.cat-head{
   display:flex;
   justify-content:space-between;
+  gap:12px;
+  align-items:baseline;
   font-weight:700;
 }
-.category-status.ok{color:var(--ok);}
-.category-status.bad{color:var(--bad);}
+.cat-status.ok{color:var(--ok);}
+.cat-status.bad{color:var(--bad);}
+
+.cat-summary{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:9.5pt;
+}
 
 .checklist{
-  margin:6px 0 0 16px;
+  margin:8px 0 0 16px;
   padding:0;
 }
 .checklist li{
   margin-bottom:4px;
   color:var(--muted);
+  font-size:9.5pt;
 }
 
 .photos-grid{
@@ -156,7 +173,7 @@ td{
 <div class="page">
 
 <div class="header">
-  <img src="{{ logo_path }}" class="logo">
+  <img src="{{ logo_path }}" class="logo" alt="Class A Fix">
   <div>
     <h1>Rental Minimum Standards Check</h1>
     <div class="subtitle">Class A Fix Service Report</div>
@@ -210,9 +227,205 @@ td{
 
 <div class="spacer"></div>
 
-<div class="card">
+<div class="card details-card">
   <div class="section-title">Category assessment details</div>
-  {{ category_details }}
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Bathroom</div>
+      <div class="cat-status {{ categories['bathroom'].status_class }}">{{ categories['bathroom'].status }}</div>
+    </div>
+    {% if categories['bathroom'].note %}<div class="cat-summary">{{ categories['bathroom'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Sink present and operational</li>
+      <li>Hot and cold water supply available</li>
+      <li>Shower or bath present</li>
+      <li>Showerhead minimum 3 star WELS rating</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Electrical safety</div>
+      <div class="cat-status {{ categories['electrical_safety'].status_class }}">{{ categories['electrical_safety'].status }}</div>
+    </div>
+    {% if categories['electrical_safety'].note %}<div class="cat-summary">{{ categories['electrical_safety'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Switchboard in safe condition</li>
+      <li>RCD protection installed</li>
+      <li>No exposed wiring or unsafe fittings</li>
+      <li>Electrical system appears safe at time of inspection</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Lighting</div>
+      <div class="cat-status {{ categories['lighting'].status_class }}">{{ categories['lighting'].status }}</div>
+    </div>
+    {% if categories['lighting'].note %}<div class="cat-summary">{{ categories['lighting'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Working light fitting in each habitable room</li>
+      <li>Working light fitting in bathroom</li>
+      <li>Working light fitting in toilet</li>
+      <li>Lighting operational at inspection time</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Kitchen</div>
+      <div class="cat-status {{ categories['kitchen'].status_class }}">{{ categories['kitchen'].status }}</div>
+    </div>
+    {% if categories['kitchen'].note %}<div class="cat-summary">{{ categories['kitchen'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Sink present and operational</li>
+      <li>Hot and cold water supply available</li>
+      <li>Cooking facilities present</li>
+      <li>Food preparation area available</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Laundry</div>
+      <div class="cat-status {{ categories['laundry'].status_class }}">{{ categories['laundry'].status }}</div>
+    </div>
+    {% if categories['laundry'].note %}<div class="cat-summary">{{ categories['laundry'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Laundry trough or suitable washing facility</li>
+      <li>Hot and cold water supply available</li>
+      <li>Drainage present</li>
+      <li>Space for washing machine connection</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Locks</div>
+      <div class="cat-status {{ categories['locks'].status_class }}">{{ categories['locks'].status }}</div>
+    </div>
+    {% if categories['locks'].note %}<div class="cat-summary">{{ categories['locks'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Deadlock on all external entry doors</li>
+      <li>Windows capable of opening have functioning latches</li>
+      <li>Keys provided for all locks</li>
+      <li>Locks functioning correctly</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Heating</div>
+      <div class="cat-status {{ categories['heating'].status_class }}">{{ categories['heating'].status }}</div>
+    </div>
+    {% if categories['heating'].note %}<div class="cat-summary">{{ categories['heating'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Fixed heater installed in living area</li>
+      <li>Heater permanently installed</li>
+      <li>Heater in working order</li>
+      <li>Heater suitable for room size</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Mould and damp</div>
+      <div class="cat-status {{ categories['mould_and_damp'].status_class }}">{{ categories['mould_and_damp'].status }}</div>
+    </div>
+    {% if categories['mould_and_damp'].note %}<div class="cat-summary">{{ categories['mould_and_damp'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>No mould caused by building defects</li>
+      <li>No rising damp</li>
+      <li>No water penetration</li>
+      <li>Adequate weatherproofing</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Structural soundness</div>
+      <div class="cat-status {{ categories['structural_soundness'].status_class }}">{{ categories['structural_soundness'].status }}</div>
+    </div>
+    {% if categories['structural_soundness'].note %}<div class="cat-summary">{{ categories['structural_soundness'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Property structurally sound</li>
+      <li>No major structural defects</li>
+      <li>Floors stable and secure</li>
+      <li>Walls and ceilings intact</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Toilets</div>
+      <div class="cat-status {{ categories['toilets'].status_class }}">{{ categories['toilets'].status }}</div>
+    </div>
+    {% if categories['toilets'].note %}<div class="cat-summary">{{ categories['toilets'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Toilet present and operational</li>
+      <li>Toilet connected to sewer or approved system</li>
+      <li>Adequate flushing mechanism</li>
+      <li>Toilet in working order</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Ventilation</div>
+      <div class="cat-status {{ categories['ventilation'].status_class }}">{{ categories['ventilation'].status }}</div>
+    </div>
+    {% if categories['ventilation'].note %}<div class="cat-summary">{{ categories['ventilation'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Adequate ventilation in habitable rooms</li>
+      <li>Ventilation to bathroom</li>
+      <li>Ventilation to kitchen</li>
+      <li>Ventilation to toilet</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Vermin-proof bins</div>
+      <div class="cat-status {{ categories['vermin_proof_bins'].status_class }}">{{ categories['vermin_proof_bins'].status }}</div>
+    </div>
+    {% if categories['vermin_proof_bins'].note %}<div class="cat-summary">{{ categories['vermin_proof_bins'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Vermin-proof rubbish bins provided</li>
+      <li>Bins have secure lids</li>
+      <li>Bins in usable condition</li>
+      <li>Suitable storage available</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Window coverings</div>
+      <div class="cat-status {{ categories['window_coverings'].status_class }}">{{ categories['window_coverings'].status }}</div>
+    </div>
+    {% if categories['window_coverings'].note %}<div class="cat-summary">{{ categories['window_coverings'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Curtains or blinds fitted where required</li>
+      <li>Window coverings provide privacy</li>
+      <li>Blind cords secured to current safety requirements</li>
+      <li>No unsafe cord loops</li>
+    </ul>
+  </div>
+
+  <div class="category">
+    <div class="cat-head">
+      <div>Windows</div>
+      <div class="cat-status {{ categories['windows'].status_class }}">{{ categories['windows'].status }}</div>
+    </div>
+    {% if categories['windows'].note %}<div class="cat-summary">{{ categories['windows'].note }}</div>{% endif %}
+    <ul class="checklist">
+      <li>Windows capable of opening</li>
+      <li>Secure latches fitted</li>
+      <li>No broken glass</li>
+      <li>Window frames in good condition</li>
+    </ul>
+  </div>
+
 </div>
 
 <div class="spacer"></div>
