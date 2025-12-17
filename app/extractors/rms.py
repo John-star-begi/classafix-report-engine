@@ -1,6 +1,6 @@
 import re
 
-# Order matters. This must match COMP order.
+# Order must match RMS legislation and template
 CATEGORIES = [
     ("bathroom", "Bathroom"),
     ("electrical_safety", "Electrical Safety"),
@@ -18,28 +18,24 @@ CATEGORIES = [
     ("windows", "Windows"),
 ]
 
-# Unicode glyphs used by COMP
-COMPLIANT_SIGNS = ["☑", "✓", "✔"]
-NON_COMPLIANT_SIGNS = ["☐", "☒", "✗", "✘", "⛔"]
-
 
 def extract_rms(text: str) -> dict:
     """
-    RMS extractor for COMP PDFs.
+    FINAL RMS extractor.
 
     Source of truth:
-    - SUMMARY section checkbox symbols
-    - ✔ / ☑ = Compliant
-    - ✗ / ☒ / ☐ = Non compliant
+    - Detailed category section
+    - Explicit text: COMPLIANT / NON COMPLIANT
 
-    Checklist text is ignored by design.
+    Summary table is GENERATED, not read.
+    Checklist text is ignored.
     """
 
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     lower_lines = [l.lower() for l in lines]
 
     # -------------------------------------------------
-    # HEADER EXTRACTION
+    # HEADER EXTRACTION (best effort)
     # -------------------------------------------------
     property_address = ""
     generated_date = ""
@@ -58,32 +54,45 @@ def extract_rms(text: str) -> dict:
                 reference = m.group(0)
 
     # -------------------------------------------------
-    # INIT CATEGORY STRUCTURE
+    # INIT CATEGORIES
     # -------------------------------------------------
     categories = {}
     for slug, name in CATEGORIES:
         categories[slug] = {
             "name": name,
-            "status": "Compliant",
+            "status": "Compliant",   # default
             "status_class": "ok",
-            "note": "",  # manual inspector comment only
+            "note": "",              # manual only
         }
 
     # -------------------------------------------------
-    # SUMMARY CHECKBOX SCAN (AUTHORITATIVE)
+    # FIND DETAILED SECTION START
     # -------------------------------------------------
-    for i, line in enumerate(lines):
+    try:
+        start_idx = next(
+            i for i, l in enumerate(lower_lines)
+            if "category assessment" in l
+        )
+    except StopIteration:
+        # Fallback: scan entire document
+        start_idx = 0
+
+    detail_lines = lines[start_idx:]
+
+    # -------------------------------------------------
+    # EXTRACT STATUS FROM CATEGORY HEADERS
+    # -------------------------------------------------
+    for i, line in enumerate(detail_lines):
         for slug, name in CATEGORIES:
             if name.lower() in line.lower():
-                # Read same + next line to catch glyph separation
-                window = " ".join(lines[i:i + 2])
+                # Check same line + next line for status text
+                window = " ".join(detail_lines[i:i+2]).upper()
 
-                # Non compliant has priority
-                if any(sym in window for sym in NON_COMPLIANT_SIGNS):
+                if "NON COMPLIANT" in window:
                     categories[slug]["status"] = "Non compliant"
                     categories[slug]["status_class"] = "bad"
 
-                elif any(sym in window for sym in COMPLIANT_SIGNS):
+                elif "COMPLIANT" in window:
                     categories[slug]["status"] = "Compliant"
                     categories[slug]["status_class"] = "ok"
 
@@ -91,7 +100,8 @@ def extract_rms(text: str) -> dict:
     # COUNTS
     # -------------------------------------------------
     non_compliant_count = sum(
-        1 for c in categories.values() if c["status"] == "Non compliant"
+        1 for c in categories.values()
+        if c["status"] == "Non compliant"
     )
 
     overall_status = (
@@ -101,7 +111,7 @@ def extract_rms(text: str) -> dict:
     )
 
     # -------------------------------------------------
-    # SUMMARY TABLE HTML
+    # BUILD SUMMARY TABLE (GENERATED)
     # -------------------------------------------------
     category_table = ""
     for slug, name in CATEGORIES:
