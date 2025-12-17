@@ -17,62 +17,84 @@ RMS_CATEGORIES = [
     "Windows",
 ]
 
+FOOTER_KEYWORDS = [
+    "COMPLIANCE REPORT",
+    "Rental Minimum Standards",
+    "Property:",
+    "Date:",
+    "Page",
+]
+
 
 def extract_rms(text: str) -> dict:
-    clean_text = re.sub(r"\s+", " ", text)
+    # --- PRESERVE STRUCTURE ---
+    raw_lines = text.splitlines()
+    lines = [l.strip() for l in raw_lines if l.strip()]
 
-    # --- HEADER FIELDS ---
-    address_match = re.search(r"Property\s+(.+?VIC\s+\d{4})", clean_text)
-    property_address = address_match.group(1) if address_match else ""
+    # --- HEADER EXTRACTION ---
+    property_address = ""
+    generated_date = ""
+    reference = ""
 
-    date_match = re.search(r"Generated\s+on\s+(\d{1,2}\s+\w+\s+\d{4})", clean_text)
-    generated_date = date_match.group(1) if date_match else ""
+    for line in lines:
+        if "Property" in line and "VIC" in line and not property_address:
+            property_address = line.replace("Property", "").strip()
+        if "Date:" in line and not generated_date:
+            generated_date = line.split("Date:")[-1].strip()
+        if "Compliance Report" in line and not reference:
+            ref_match = re.search(r"Compliance Report\s*(\d+)", line)
+            if ref_match:
+                reference = ref_match.group(1)
 
-    ref_match = re.search(r"Compliance Report[:\s]+(\d+)", clean_text)
-    reference = ref_match.group(1) if ref_match else ""
+    # --- CATEGORY BLOCKS ---
+    category_blocks = {}
+    current_category = None
 
-    overall_status = "Compliant"
-    if re.search(r"Non\s+compliant", clean_text, re.IGNORECASE):
-        overall_status = "One non compliant category identified"
+    for line in lines:
+        # Detect category header (exact match only)
+        for cat in RMS_CATEGORIES:
+            if line.lower() == cat.lower():
+                current_category = cat
+                category_blocks[current_category] = []
+                break
+        else:
+            if current_category:
+                # Skip boilerplate
+                if any(k.lower() in line.lower() for k in FOOTER_KEYWORDS):
+                    continue
+                category_blocks[current_category].append(line)
 
-    # --- CATEGORY EXTRACTION ---
-    categories_data = []
+    categories = []
+    non_compliant_count = 0
 
-    for i, category in enumerate(RMS_CATEGORIES):
-        start = clean_text.lower().find(category.lower())
-        end = (
-            clean_text.lower().find(RMS_CATEGORIES[i + 1].lower())
-            if i + 1 < len(RMS_CATEGORIES)
-            else len(clean_text)
-        )
-
-        block = clean_text[start:end] if start != -1 else ""
+    for cat in RMS_CATEGORIES:
+        block_lines = category_blocks.get(cat, [])
 
         status = "Compliant"
-        if re.search(r"non\s+compliant", block, re.IGNORECASE):
-            status = "Non compliant"
+        notes_lines = []
 
-        notes_match = re.search(
-            r"(Compliant|Non compliant)\s*(.*)", block, re.IGNORECASE
-        )
-        notes = notes_match.group(2).strip() if notes_match else ""
+        for line in block_lines:
+            if "non compliant" in line.lower():
+                status = "Non compliant"
+            elif line.lower().startswith("compliant"):
+                status = "Compliant"
+            else:
+                notes_lines.append(line)
 
-        categories_data.append(
-            {
-                "name": category,
-                "status": status,
-                "notes": notes,
-            }
-        )
+        notes = " ".join(notes_lines).strip()
 
-    # --- COUNTS ---
-    non_compliant_count = sum(
-        1 for c in categories_data if c["status"] == "Non compliant"
-    )
+        if status == "Non compliant":
+            non_compliant_count += 1
+
+        categories.append({
+            "name": cat,
+            "status": status,
+            "notes": notes,
+        })
 
     # --- SUMMARY TABLE HTML ---
     category_table = ""
-    for c in categories_data:
+    for c in categories:
         status_class = "status-ok" if c["status"] == "Compliant" else "status-bad"
         category_table += f"""
         <tr>
@@ -84,7 +106,7 @@ def extract_rms(text: str) -> dict:
 
     # --- DETAILED CATEGORY HTML ---
     category_details = ""
-    for c in categories_data:
+    for c in categories:
         status_class = "ok" if c["status"] == "Compliant" else "bad"
         category_details += f"""
         <div class="category">
@@ -93,6 +115,12 @@ def extract_rms(text: str) -> dict:
           <div class="category-notes">{c['notes']}</div>
         </div>
         """
+
+    overall_status = (
+        "One non compliant category identified"
+        if non_compliant_count > 0
+        else "Compliant"
+    )
 
     return {
         "property_address": property_address,
