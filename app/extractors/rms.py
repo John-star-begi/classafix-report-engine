@@ -1,154 +1,134 @@
 import re
 
-RMS_CATEGORIES = [
-    "Bathroom",
-    "Electrical safety",
-    "Lighting",
-    "Kitchen",
-    "Laundry",
-    "Locks",
-    "Heating",
-    "Mould and damp",
-    "Structural soundness",
-    "Toilets",
-    "Ventilation",
-    "Vermin-proof bins",
-    "Window coverings",
-    "Windows",
+CATEGORIES = [
+    ("bathroom", "Bathroom"),
+    ("electrical_safety", "Electrical safety"),
+    ("lighting", "Lighting"),
+    ("kitchen", "Kitchen"),
+    ("laundry", "Laundry"),
+    ("locks", "Locks"),
+    ("heating", "Heating"),
+    ("mould_and_damp", "Mould and damp"),
+    ("structural_soundness", "Structural soundness"),
+    ("toilets", "Toilets"),
+    ("ventilation", "Ventilation"),
+    ("vermin_proof_bins", "Vermin-proof bins"),
+    ("window_coverings", "Window coverings"),
+    ("windows", "Windows"),
 ]
 
+STATUS_WORDS = ["non compliant", "non-compliant", "compliant"]
 
-def normalize(s: str) -> str:
+
+def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
+
+
+def _find_first_index(lines, predicate):
+    for i, l in enumerate(lines):
+        if predicate(l):
+            return i
+    return -1
 
 
 def extract_rms(text: str) -> dict:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
 
-    # --------------------------------------------------
-    # HEADER
-    # --------------------------------------------------
+    # Header values
     property_address = ""
     generated_date = ""
     reference = ""
 
     for l in lines:
-        if "Property" in l and "VIC" in l and not property_address:
+        if not property_address and "Property" in l and "VIC" in l:
             property_address = l.replace("Property", "").strip()
-        if "Date:" in l and not generated_date:
-            generated_date = l.split("Date:")[-1].strip()
-        if "Compliance Report" in l and not reference:
-            m = re.search(r"(\d+)", l)
+        if not generated_date and "Date:" in l:
+            generated_date = l.split("Date:", 1)[-1].strip()
+        if not reference and "Compliance Report" in l:
+            m = re.search(r"(\d{3,})", l)
             if m:
                 reference = m.group(1)
 
-    # --------------------------------------------------
-    # SPLIT DOCUMENT INTO SECTIONS
-    # --------------------------------------------------
-    summary_lines = []
-    detail_lines = []
+    # Try to locate the summary table region
+    start_idx = _find_first_index(lines, lambda x: "Category" in x and "Status" in x)
+    if start_idx == -1:
+        start_idx = 0
 
-    in_details = False
-    for l in lines:
-        if "Category assessment details" in l:
-            in_details = True
+    # Stop before the detailed section if present
+    end_idx = _find_first_index(lines, lambda x: "Category assessment details" in x)
+    if end_idx == -1:
+        end_idx = len(lines)
+
+    summary_lines = lines[start_idx:end_idx]
+
+    categories = {}
+    for slug, name in CATEGORIES:
+        categories[slug] = {
+            "name": name,
+            "status": "Compliant",
+            "status_class": "ok",
+            "note": "",
+        }
+
+    # Robust scan: find a category line, then find the nearest status token after it
+    for slug, name in CATEGORIES:
+        name_norm = _norm(name)
+
+        idx = _find_first_index(summary_lines, lambda x: _norm(x) == name_norm or _norm(x).startswith(name_norm + " "))
+        if idx == -1:
             continue
 
-        if in_details:
-            detail_lines.append(l)
-        else:
-            summary_lines.append(l)
+        window = summary_lines[idx: min(idx + 8, len(summary_lines))]
 
-    # --------------------------------------------------
-    # SUMMARY TABLE → COMPLIANCE STATUS
-    # --------------------------------------------------
-    status_map = {}
-    note_map = {}
+        status = None
+        note = ""
 
-    for cat in RMS_CATEGORIES:
-        status_map[cat] = "Compliant"
-        note_map[cat] = ""
-
-    for i, l in enumerate(summary_lines):
-        for cat in RMS_CATEGORIES:
-            if normalize(cat) == normalize(l):
-                # Look ahead for status
-                for j in range(i + 1, min(i + 6, len(summary_lines))):
-                    if "non compliant" in summary_lines[j].lower():
-                        status_map[cat] = "Non compliant"
-                        # optional note
-                        note_map[cat] = summary_lines[j]
-                        break
-                    if "compliant" in summary_lines[j].lower():
-                        status_map[cat] = "Compliant"
-                        break
-
-    non_compliant_count = sum(
-        1 for s in status_map.values() if s == "Non compliant"
-    )
-
-    # --------------------------------------------------
-    # DETAIL SECTION → CHECKLIST
-    # --------------------------------------------------
-    checklist = {c: [] for c in RMS_CATEGORIES}
-    current_cat = None
-
-    for l in detail_lines:
-        for cat in RMS_CATEGORIES:
-            if re.match(rf"^{cat}\b", l, re.IGNORECASE):
-                current_cat = cat
+        for w in window:
+            lw = _norm(w)
+            if "non compliant" in lw or "non-compliant" in lw:
+                status = "Non compliant"
+                # If the note is on the same line after the status, keep it
+                note = w
                 break
-        else:
-            if current_cat:
-                # Ignore boilerplate
-                if any(x in l for x in ["COMPLIANCE REPORT", "Page"]):
-                    continue
-                # Ignore pure status words
-                if l.lower() in ["compliant", "non compliant"]:
-                    continue
-                checklist[current_cat].append(l)
+            if lw == "compliant" or lw.endswith(" compliant") or " compliant" in lw:
+                # Only accept compliant if it is a standalone status token or close to it
+                if lw == "compliant" or lw.endswith(" compliant"):
+                    status = "Compliant"
+                    break
 
-    # --------------------------------------------------
-    # HTML BUILD
-    # --------------------------------------------------
+        # Note cleanup: remove category name and status words
+        if note:
+            cleaned = note
+            cleaned = re.sub(re.escape(name), "", cleaned, flags=re.IGNORECASE).strip()
+            cleaned = re.sub(r"\bNon[- ]compliant\b", "", cleaned, flags=re.IGNORECASE).strip()
+            cleaned = re.sub(r"\bCompliant\b", "", cleaned, flags=re.IGNORECASE).strip()
+            # Remove any leftover separators
+            cleaned = cleaned.strip(" :-|")
+            note = cleaned
+
+        if status:
+            categories[slug]["status"] = status
+            categories[slug]["status_class"] = "bad" if status == "Non compliant" else "ok"
+            categories[slug]["note"] = note
+
+    non_compliant_count = sum(1 for c in categories.values() if c["status"] == "Non compliant")
+
+    # Build the summary table HTML
     category_table = ""
-    category_details = ""
-
-    for cat in RMS_CATEGORIES:
-        status = status_map[cat]
-        status_class = "status-ok" if status == "Compliant" else "status-bad"
-
+    for slug, name in CATEGORIES:
+        c = categories[slug]
+        status_td_class = "status-bad" if c["status"] == "Non compliant" else "status-ok"
         category_table += f"""
         <tr>
-          <td>{cat}</td>
-          <td class="{status_class}">{status}</td>
-          <td>{note_map.get(cat, "")}</td>
+          <td>{c['name']}</td>
+          <td class="{status_td_class}">{c['status']}</td>
+          <td>{c['note']}</td>
         </tr>
         """
 
-        checklist_html = ""
-        for item in checklist[cat]:
-            checklist_html += f"<li>{item}</li>"
-
-        short_class = "ok" if status == "Compliant" else "bad"
-
-        category_details += f"""
-        <div class="category">
-          <div class="category-header">
-            <div>{cat}</div>
-            <div class="category-status {short_class}">{status}</div>
-          </div>
-          <ul class="checklist">
-            {checklist_html}
-          </ul>
-        </div>
-        """
-
-    overall_status = (
-        "One non compliant category identified"
-        if non_compliant_count > 0
-        else "Compliant"
-    )
+    overall_status = "Compliant"
+    if non_compliant_count > 0:
+        overall_status = "One non compliant category identified"
 
     return {
         "property_address": property_address,
@@ -158,5 +138,5 @@ def extract_rms(text: str) -> dict:
         "non_compliant_count": non_compliant_count,
         "actions_required": non_compliant_count,
         "category_table": category_table,
-        "category_details": category_details,
+        "categories": categories,
     }
