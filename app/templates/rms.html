@@ -103,17 +103,22 @@ td{
 .status-bad{color:var(--bad);font-weight:700;}
 
 .category{
-  display:grid;
-  grid-template-columns:160px 1fr;
-  gap:10px 14px;
-  margin-bottom:12px;
+  margin-bottom:14px;
 }
-.category-name{font-weight:700;}
-.category-status{font-weight:700;}
+.category-header{
+  display:flex;
+  justify-content:space-between;
+  font-weight:700;
+}
 .category-status.ok{color:var(--ok);}
 .category-status.bad{color:var(--bad);}
-.category-notes{
-  grid-column:2;
+
+.checklist{
+  margin:6px 0 0 16px;
+  padding:0;
+}
+.checklist li{
+  margin-bottom:4px;
   color:var(--muted);
 }
 
@@ -121,11 +126,6 @@ td{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:12px;
-}
-.photo{
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  overflow:hidden;
 }
 .photo img{
   width:100%;
@@ -155,9 +155,8 @@ td{
 <body>
 <div class="page">
 
-<!-- Header -->
 <div class="header">
-  <img src="{{ logo_path }}" class="logo" alt="Class A Fix">
+  <img src="{{ logo_path }}" class="logo">
   <div>
     <h1>Rental Minimum Standards Check</h1>
     <div class="subtitle">Class A Fix Service Report</div>
@@ -166,7 +165,6 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Info -->
 <div class="card info-card">
   <div class="info-grid">
     <div class="label">Property</div><div class="value">{{ property_address }}</div>
@@ -178,7 +176,6 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Summary -->
 <div class="summary-row">
   <div class="card summary-card">
     <div class="summary-title">Standards checked</div>
@@ -196,14 +193,13 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Category summary table (14 rows expected) -->
 <div class="card table-card">
 <table>
 <thead>
 <tr>
   <th>Category</th>
   <th>Status</th>
-  <th>Notes</th>
+  <th>Summary</th>
 </tr>
 </thead>
 <tbody>
@@ -214,7 +210,6 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Detailed category breakdown (14 sections expected) -->
 <div class="card">
   <div class="section-title">Category assessment details</div>
   {{ category_details }}
@@ -222,7 +217,6 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Photos -->
 <div class="card">
   <div class="section-title">Inspection photo record</div>
   <div class="photos-grid">
@@ -232,14 +226,12 @@ td{
 
 <div class="spacer"></div>
 
-<!-- Assurance -->
 <div class="assurance">
   This report has been prepared to help ensure the property meets Victorian Minimum Rental Standards.
 </div>
 
 <div class="spacer"></div>
 
-<!-- Footer -->
 <div class="footer">
   Class A Fix – Maintenance Management Services | info@classafix.com.au | 03 9063 1538
 </div>
