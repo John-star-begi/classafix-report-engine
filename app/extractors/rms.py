@@ -17,102 +17,98 @@ RMS_CATEGORIES = [
     "Windows",
 ]
 
-FOOTER_KEYWORDS = [
-    "COMPLIANCE REPORT",
-    "Rental Minimum Standards",
-    "Property:",
-    "Date:",
-    "Page",
-]
+SUMMARY_HEADER = "Category Status"
 
 
 def extract_rms(text: str) -> dict:
-    # --- PRESERVE STRUCTURE ---
-    raw_lines = text.splitlines()
-    lines = [l.strip() for l in raw_lines if l.strip()]
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
 
-    # --- HEADER EXTRACTION ---
+    # ---------- HEADER ----------
     property_address = ""
     generated_date = ""
     reference = ""
 
-    for line in lines:
-        if "Property" in line and "VIC" in line and not property_address:
-            property_address = line.replace("Property", "").strip()
-        if "Date:" in line and not generated_date:
-            generated_date = line.split("Date:")[-1].strip()
-        if "Compliance Report" in line and not reference:
-            ref_match = re.search(r"Compliance Report\s*(\d+)", line)
-            if ref_match:
-                reference = ref_match.group(1)
+    for l in lines:
+        if "Property" in l and "VIC" in l and not property_address:
+            property_address = l.replace("Property", "").strip()
+        if "Date:" in l and not generated_date:
+            generated_date = l.split("Date:")[-1].strip()
+        if "Compliance Report" in l and not reference:
+            m = re.search(r"(\d+)", l)
+            if m:
+                reference = m.group(1)
 
-    # --- CATEGORY BLOCKS ---
-    category_blocks = {}
-    current_category = None
-
-    for line in lines:
-        # Detect category header (exact match only)
-        for cat in RMS_CATEGORIES:
-            if line.lower() == cat.lower():
-                current_category = cat
-                category_blocks[current_category] = []
-                break
-        else:
-            if current_category:
-                # Skip boilerplate
-                if any(k.lower() in line.lower() for k in FOOTER_KEYWORDS):
-                    continue
-                category_blocks[current_category].append(line)
-
-    categories = []
-    non_compliant_count = 0
+    # ---------- SUMMARY TABLE ----------
+    summary_status = {}
+    summary_notes = {}
 
     for cat in RMS_CATEGORIES:
-        block_lines = category_blocks.get(cat, [])
+        for l in lines:
+            if l.startswith(cat):
+                if "Non compliant" in l:
+                    summary_status[cat] = "Non compliant"
+                else:
+                    summary_status[cat] = "Compliant"
 
-        status = "Compliant"
-        notes_lines = []
+                parts = l.split(cat, 1)
+                summary_notes[cat] = parts[1].replace("Compliant", "").replace("Non compliant", "").strip()
+                break
+        else:
+            summary_status[cat] = "Compliant"
+            summary_notes[cat] = ""
 
-        for line in block_lines:
-            if "non compliant" in line.lower():
-                status = "Non compliant"
-            elif line.lower().startswith("compliant"):
-                status = "Compliant"
+    non_compliant_count = sum(1 for s in summary_status.values() if s == "Non compliant")
+
+    # ---------- CHECKLIST ----------
+    checklist_blocks = {c: [] for c in RMS_CATEGORIES}
+    current = None
+
+    for l in lines:
+        if l in RMS_CATEGORIES:
+            current = l
+            continue
+
+        if current:
+            if any(l.startswith(c) for c in RMS_CATEGORIES):
+                current = None
+            elif "COMPLIANCE REPORT" in l or "Page" in l:
+                continue
             else:
-                notes_lines.append(line)
+                checklist_blocks[current].append(l)
 
-        notes = " ".join(notes_lines).strip()
-
-        if status == "Non compliant":
-            non_compliant_count += 1
-
-        categories.append({
-            "name": cat,
-            "status": status,
-            "notes": notes,
-        })
-
-    # --- SUMMARY TABLE HTML ---
+    # ---------- HTML BUILD ----------
     category_table = ""
-    for c in categories:
-        status_class = "status-ok" if c["status"] == "Compliant" else "status-bad"
+    category_details = ""
+
+    for cat in RMS_CATEGORIES:
+        status = summary_status[cat]
+        status_class = "status-ok" if status == "Compliant" else "status-bad"
+
         category_table += f"""
         <tr>
-          <td>{c['name']}</td>
-          <td class="{status_class}">{c['status']}</td>
-          <td>{c['notes']}</td>
+          <td>{cat}</td>
+          <td class="{status_class}">{status}</td>
+          <td>{summary_notes[cat]}</td>
         </tr>
         """
 
-    # --- DETAILED CATEGORY HTML ---
-    category_details = ""
-    for c in categories:
-        status_class = "ok" if c["status"] == "Compliant" else "bad"
+        checklist_html = ""
+        for item in checklist_blocks.get(cat, []):
+            if len(item) < 4:
+                continue
+            checklist_html += f"<li>{item}</li>"
+
+        status_class_short = "ok" if status == "Compliant" else "bad"
+
         category_details += f"""
         <div class="category">
-          <div class="category-name">{c['name']}</div>
-          <div class="category-status {status_class}">{c['status']}</div>
-          <div class="category-notes">{c['notes']}</div>
+          <div class="category-header">
+            <div>{cat}</div>
+            <div class="category-status {status_class_short}">{status}</div>
+          </div>
+          <ul class="checklist">
+            {checklist_html}
+          </ul>
         </div>
         """
 
@@ -127,10 +123,8 @@ def extract_rms(text: str) -> dict:
         "overall_status": overall_status,
         "generated_date": generated_date,
         "reference": reference,
-
         "non_compliant_count": non_compliant_count,
         "actions_required": non_compliant_count,
-
         "category_table": category_table,
         "category_details": category_details,
     }
