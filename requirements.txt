@@ -3,3 +3,4 @@ uvicorn
 pdfplumber
 weasyprint
 python-multipart
+jinja2
