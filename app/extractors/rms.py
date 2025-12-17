@@ -17,13 +17,17 @@ RMS_CATEGORIES = [
     "Windows",
 ]
 
-SUMMARY_HEADER = "Category Status"
+
+def normalize(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().lower())
 
 
 def extract_rms(text: str) -> dict:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
 
-    # ---------- HEADER ----------
+    # --------------------------------------------------
+    # HEADER
+    # --------------------------------------------------
     property_address = ""
     generated_date = ""
     reference = ""
@@ -38,73 +42,101 @@ def extract_rms(text: str) -> dict:
             if m:
                 reference = m.group(1)
 
-    # ---------- SUMMARY TABLE ----------
-    summary_status = {}
-    summary_notes = {}
+    # --------------------------------------------------
+    # SPLIT DOCUMENT INTO SECTIONS
+    # --------------------------------------------------
+    summary_lines = []
+    detail_lines = []
 
-    for cat in RMS_CATEGORIES:
-        for l in lines:
-            if l.startswith(cat):
-                if "Non compliant" in l:
-                    summary_status[cat] = "Non compliant"
-                else:
-                    summary_status[cat] = "Compliant"
-
-                parts = l.split(cat, 1)
-                summary_notes[cat] = parts[1].replace("Compliant", "").replace("Non compliant", "").strip()
-                break
-        else:
-            summary_status[cat] = "Compliant"
-            summary_notes[cat] = ""
-
-    non_compliant_count = sum(1 for s in summary_status.values() if s == "Non compliant")
-
-    # ---------- CHECKLIST ----------
-    checklist_blocks = {c: [] for c in RMS_CATEGORIES}
-    current = None
-
+    in_details = False
     for l in lines:
-        if l in RMS_CATEGORIES:
-            current = l
+        if "Category assessment details" in l:
+            in_details = True
             continue
 
-        if current:
-            if any(l.startswith(c) for c in RMS_CATEGORIES):
-                current = None
-            elif "COMPLIANCE REPORT" in l or "Page" in l:
-                continue
-            else:
-                checklist_blocks[current].append(l)
+        if in_details:
+            detail_lines.append(l)
+        else:
+            summary_lines.append(l)
 
-    # ---------- HTML BUILD ----------
+    # --------------------------------------------------
+    # SUMMARY TABLE → COMPLIANCE STATUS
+    # --------------------------------------------------
+    status_map = {}
+    note_map = {}
+
+    for cat in RMS_CATEGORIES:
+        status_map[cat] = "Compliant"
+        note_map[cat] = ""
+
+    for i, l in enumerate(summary_lines):
+        for cat in RMS_CATEGORIES:
+            if normalize(cat) == normalize(l):
+                # Look ahead for status
+                for j in range(i + 1, min(i + 6, len(summary_lines))):
+                    if "non compliant" in summary_lines[j].lower():
+                        status_map[cat] = "Non compliant"
+                        # optional note
+                        note_map[cat] = summary_lines[j]
+                        break
+                    if "compliant" in summary_lines[j].lower():
+                        status_map[cat] = "Compliant"
+                        break
+
+    non_compliant_count = sum(
+        1 for s in status_map.values() if s == "Non compliant"
+    )
+
+    # --------------------------------------------------
+    # DETAIL SECTION → CHECKLIST
+    # --------------------------------------------------
+    checklist = {c: [] for c in RMS_CATEGORIES}
+    current_cat = None
+
+    for l in detail_lines:
+        for cat in RMS_CATEGORIES:
+            if re.match(rf"^{cat}\b", l, re.IGNORECASE):
+                current_cat = cat
+                break
+        else:
+            if current_cat:
+                # Ignore boilerplate
+                if any(x in l for x in ["COMPLIANCE REPORT", "Page"]):
+                    continue
+                # Ignore pure status words
+                if l.lower() in ["compliant", "non compliant"]:
+                    continue
+                checklist[current_cat].append(l)
+
+    # --------------------------------------------------
+    # HTML BUILD
+    # --------------------------------------------------
     category_table = ""
     category_details = ""
 
     for cat in RMS_CATEGORIES:
-        status = summary_status[cat]
+        status = status_map[cat]
         status_class = "status-ok" if status == "Compliant" else "status-bad"
 
         category_table += f"""
         <tr>
           <td>{cat}</td>
           <td class="{status_class}">{status}</td>
-          <td>{summary_notes[cat]}</td>
+          <td>{note_map.get(cat, "")}</td>
         </tr>
         """
 
         checklist_html = ""
-        for item in checklist_blocks.get(cat, []):
-            if len(item) < 4:
-                continue
+        for item in checklist[cat]:
             checklist_html += f"<li>{item}</li>"
 
-        status_class_short = "ok" if status == "Compliant" else "bad"
+        short_class = "ok" if status == "Compliant" else "bad"
 
         category_details += f"""
         <div class="category">
           <div class="category-header">
             <div>{cat}</div>
-            <div class="category-status {status_class_short}">{status}</div>
+            <div class="category-status {short_class}">{status}</div>
           </div>
           <ul class="checklist">
             {checklist_html}
